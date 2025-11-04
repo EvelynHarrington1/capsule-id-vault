@@ -19,6 +19,10 @@ export default {
           800: '#075985',
           900: '#0c4a6e',
         },
+        capsule: {
+          purple: '#A855F7',
+          blue: '#3B82F6',
+        },
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
