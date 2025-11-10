@@ -6,6 +6,12 @@ A privacy-first health metrics analysis DApp using **Fully Homomorphic Encryptio
 
 ## 🚀 Live Demo
 
+**Deployed Application**: [https://capsule-id.vercel.app/](https://capsule-id.vercel.app/)
+
+📹 **Demo Video**: [Watch the demo](https://github.com/EvelynHarrington1/capsule-id-vault/raw/main/capsule-id.mp4)
+
+## 🚀 Live Demo
+
 **Deployed Application**: [https://capsule-id-vault.vercel.app/](https://capsule-id-vault.vercel.app/)
 
 📹 **Demo Video**: [Watch the demo](https://github.com/EvelynHarrington1/capsule-id-vault/raw/main/capsule-id.mp4)
