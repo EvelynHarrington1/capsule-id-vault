@@ -15,6 +15,8 @@ contract HealthMetrics is SepoliaConfig {
         euint32 bmi;           // Encrypted BMI value
         euint32 bloodSugar;    // Encrypted blood sugar level
         euint32 heartRate;     // Encrypted heart rate
+        euint32 systolicBP;    // Encrypted systolic blood pressure
+        euint32 diastolicBP;   // Encrypted diastolic blood pressure
         euint32 healthScore;   // Encrypted calculated health score
         uint256 timestamp;     // Timestamp of submission
         bool exists;           // Flag to check if data exists
