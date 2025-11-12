@@ -41,30 +41,40 @@ contract HealthMetrics is SepoliaConfig {
     /// @param _bloodSugarProof Proof for blood sugar encryption
     /// @param _heartRate Encrypted heart rate value (external format)
     /// @param _heartRateProof Proof for heart rate encryption
-    /// @dev Formula: healthScore = 3*bmi + 5*bloodSugar + 2*heartRate
-    /// @dev This represents a weighted sum (not scaled by 10 to avoid FHE division complexity)
+    /// @dev Enhanced formula: healthScore = 2*bmi + 4*bloodSugar + 2*heartRate + systolicBP/10 + diastolicBP/10
+    /// @dev Improved weighting with blood pressure factors for comprehensive health assessment
     function submitHealthData(
         externalEuint32 _bmi,
         bytes calldata _bmiProof,
         externalEuint32 _bloodSugar,
         bytes calldata _bloodSugarProof,
         externalEuint32 _heartRate,
-        bytes calldata _heartRateProof
+        bytes calldata _heartRateProof,
+        externalEuint32 _systolicBP,
+        bytes calldata _systolicBPProof,
+        externalEuint32 _diastolicBP,
+        bytes calldata _diastolicBPProof
     ) external {
         // Convert external encrypted inputs to internal encrypted values
         euint32 encryptedBmi = FHE.fromExternal(_bmi, _bmiProof);
         euint32 encryptedBloodSugar = FHE.fromExternal(_bloodSugar, _bloodSugarProof);
         euint32 encryptedHeartRate = FHE.fromExternal(_heartRate, _heartRateProof);
-        
-        // Calculate health score using homomorphic operations
-        // Formula: healthScore = 3*bmi + 5*bloodSugar + 2*heartRate
-        // Note: We skip division by 10 to avoid complex FHE division operations
-        // The score represents a weighted sum where blood sugar has the highest impact
-        euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
-        euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
+        euint32 encryptedSystolicBP = FHE.fromExternal(_systolicBP, _systolicBPProof);
+        euint32 encryptedDiastolicBP = FHE.fromExternal(_diastolicBP, _diastolicBPProof);
+
+        // Calculate enhanced health score using homomorphic operations
+        // Formula: healthScore = 2*bmi + 4*bloodSugar + 2*heartRate + systolicBP/10 + diastolicBP/10
+        // Improved weighting with blood pressure factors for comprehensive assessment
+        euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(2));
+        euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(4));
         euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
-        
-        euint32 healthScore = FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted);
+        euint32 systolicWeighted = FHE.div(encryptedSystolicBP, FHE.asEuint32(10));
+        euint32 diastolicWeighted = FHE.div(encryptedDiastolicBP, FHE.asEuint32(10));
+
+        euint32 healthScore = FHE.add(
+            FHE.add(FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted), systolicWeighted),
+            diastolicWeighted
+        );
         
         // Track new users
         if (!healthRecords[msg.sender].exists) {
@@ -76,6 +86,8 @@ contract HealthMetrics is SepoliaConfig {
             bmi: encryptedBmi,
             bloodSugar: encryptedBloodSugar,
             heartRate: encryptedHeartRate,
+            systolicBP: encryptedSystolicBP,
+            diastolicBP: encryptedDiastolicBP,
             healthScore: healthScore,
             timestamp: block.timestamp,
             exists: true
@@ -85,6 +97,8 @@ contract HealthMetrics is SepoliaConfig {
         FHE.allow(encryptedBmi, msg.sender);
         FHE.allow(encryptedBloodSugar, msg.sender);
         FHE.allow(encryptedHeartRate, msg.sender);
+        FHE.allow(encryptedSystolicBP, msg.sender);
+        FHE.allow(encryptedDiastolicBP, msg.sender);
         FHE.allow(healthScore, msg.sender);
         
         // Also allow contract to access for future operations
