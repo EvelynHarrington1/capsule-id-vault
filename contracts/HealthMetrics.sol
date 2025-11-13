@@ -24,6 +24,16 @@ contract HealthMetrics is SepoliaConfig {
     
     /// @notice Mapping from user address to their encrypted health data
     mapping(address => HealthData) private healthRecords;
+
+    /// @notice User demographics for personalized health scoring
+    struct UserDemographics {
+        uint8 age;      // Age in years (18-120)
+        uint8 gender;   // 0: unspecified, 1: male, 2: female
+        bool exists;    // Whether demographics have been set
+    }
+
+    /// @notice Mapping from user address to demographics
+    mapping(address => UserDemographics) private userDemographics;
     
     /// @notice Array to track all users who have submitted data
     address[] private users;
@@ -33,7 +43,36 @@ contract HealthMetrics is SepoliaConfig {
     
     /// @notice Event emitted when health score is calculated
     event HealthScoreCalculated(address indexed user, uint256 timestamp);
-    
+
+    /// @notice Event emitted when user demographics are updated
+    event DemographicsUpdated(address indexed user, uint8 age, uint8 gender);
+
+    /// @notice Set user demographics for personalized health scoring
+    /// @param _age Age in years (must be between 18 and 120)
+    /// @param _gender Gender code (0: unspecified, 1: male, 2: female)
+    function setDemographics(uint8 _age, uint8 _gender) external {
+        require(_age >= 18 && _age <= 120, "Age must be between 18 and 120");
+        require(_gender <= 2, "Invalid gender code");
+
+        userDemographics[msg.sender] = UserDemographics({
+            age: _age,
+            gender: _gender,
+            exists: true
+        });
+
+        emit DemographicsUpdated(msg.sender, _age, _gender);
+    }
+
+    /// @notice Get user demographics
+    /// @param user Address to query demographics for
+    /// @return age User's age
+    /// @return gender User's gender code
+    /// @return exists Whether demographics have been set
+    function getDemographics(address user) external view returns (uint8 age, uint8 gender, bool exists) {
+        UserDemographics memory demo = userDemographics[user];
+        return (demo.age, demo.gender, demo.exists);
+    }
+
     /// @notice Submit encrypted health metrics and calculate health score
     /// @param _bmi Encrypted BMI value (external format)
     /// @param _bmiProof Proof for BMI encryption
@@ -76,10 +115,24 @@ contract HealthMetrics is SepoliaConfig {
         euint32 systolicWeighted = FHE.div(encryptedSystolicBP, FHE.asEuint32(10));
         euint32 diastolicWeighted = FHE.div(encryptedDiastolicBP, FHE.asEuint32(10));
 
-        euint32 healthScore = FHE.add(
+        // Apply age and gender adjustments if demographics exist
+        euint32 adjustedScore = FHE.add(
             FHE.add(FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted), systolicWeighted),
             diastolicWeighted
         );
+
+        // Age adjustment: older adults get slight score reduction for same metrics
+        UserDemographics memory demo = userDemographics[msg.sender];
+        if (demo.exists) {
+            if (demo.age > 50) {
+                // Reduce score by 5% for age > 50
+                adjustedScore = FHE.mul(adjustedScore, FHE.asEuint32(95));
+                adjustedScore = FHE.div(adjustedScore, FHE.asEuint32(100));
+            }
+            // Gender-specific adjustments could be added here in future versions
+        }
+
+        euint32 healthScore = adjustedScore;
         
         // Track new users
         if (!healthRecords[msg.sender].exists) {
