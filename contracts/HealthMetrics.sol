@@ -55,6 +55,11 @@ contract HealthMetrics is SepoliaConfig {
         externalEuint32 _diastolicBP,
         bytes calldata _diastolicBPProof
     ) external {
+        // Input validation for health metrics
+        require(_bmi > 0 && _bloodSugar > 0 && _heartRate > 0, "Health metrics must be positive");
+        require(_systolicBP > 0 && _diastolicBP > 0, "Blood pressure values must be positive");
+        require(_systolicBP >= _diastolicBP, "Systolic BP must be greater than diastolic BP");
+
         // Convert external encrypted inputs to internal encrypted values
         euint32 encryptedBmi = FHE.fromExternal(_bmi, _bmiProof);
         euint32 encryptedBloodSugar = FHE.fromExternal(_bloodSugar, _bloodSugarProof);
