@@ -37,6 +37,12 @@ contract HealthMetrics is SepoliaConfig {
     
     /// @notice Array to track all users who have submitted data
     address[] private users;
+
+    /// @notice Emergency stop flag for critical situations
+    bool public emergencyStop;
+
+    /// @notice Authorized addresses that can manage emergency functions
+    mapping(address => bool) public emergencyAdmins;
     
     /// @notice Event emitted when health data is submitted
     event HealthDataSubmitted(address indexed user, uint256 timestamp);
@@ -46,6 +52,50 @@ contract HealthMetrics is SepoliaConfig {
 
     /// @notice Event emitted when user demographics are updated
     event DemographicsUpdated(address indexed user, uint8 age, uint8 gender);
+
+    /// @notice Emergency control events
+    event EmergencyStopActivated(address indexed activator);
+    event EmergencyStopDeactivated(address indexed activator);
+    event EmergencyAdminAdded(address indexed admin);
+    event EmergencyAdminRemoved(address indexed admin);
+
+    /// @notice Constructor - sets deployer as initial emergency admin
+    constructor() {
+        emergencyAdmins[msg.sender] = true;
+        emit EmergencyAdminAdded(msg.sender);
+    }
+
+    /// @notice Activate emergency stop (admin only)
+    function activateEmergencyStop() external {
+        require(emergencyAdmins[msg.sender], "Only emergency admin can activate stop");
+        emergencyStop = true;
+        emit EmergencyStopActivated(msg.sender);
+    }
+
+    /// @notice Deactivate emergency stop (admin only)
+    function deactivateEmergencyStop() external {
+        require(emergencyAdmins[msg.sender], "Only emergency admin can deactivate stop");
+        emergencyStop = false;
+        emit EmergencyStopDeactivated(msg.sender);
+    }
+
+    /// @notice Add emergency admin (admin only)
+    /// @param admin Address to add as emergency admin
+    function addEmergencyAdmin(address admin) external {
+        require(emergencyAdmins[msg.sender], "Only emergency admin can add admins");
+        require(admin != address(0), "Cannot add zero address as admin");
+        emergencyAdmins[admin] = true;
+        emit EmergencyAdminAdded(admin);
+    }
+
+    /// @notice Remove emergency admin (admin only)
+    /// @param admin Address to remove from emergency admins
+    function removeEmergencyAdmin(address admin) external {
+        require(emergencyAdmins[msg.sender], "Only emergency admin can remove admins");
+        require(admin != msg.sender, "Cannot remove yourself as admin");
+        emergencyAdmins[admin] = false;
+        emit EmergencyAdminRemoved(admin);
+    }
 
     /// @notice Set user demographics for personalized health scoring
     /// @param _age Age in years (must be between 18 and 120)
@@ -94,6 +144,9 @@ contract HealthMetrics is SepoliaConfig {
         externalEuint32 _diastolicBP,
         bytes calldata _diastolicBPProof
     ) external {
+        // Emergency stop check
+        require(!emergencyStop, "Contract is in emergency stop mode");
+
         // Input validation for health metrics
         require(_bmi > 0 && _bloodSugar > 0 && _heartRate > 0, "Health metrics must be positive");
         require(_systolicBP > 0 && _diastolicBP > 0, "Blood pressure values must be positive");
