@@ -32,72 +32,7 @@ The contract uses `SepoliaConfig` from `@fhevm/solidity` to enable FHE operation
 
 ### HealthMetrics.sol
 
-The main contract implements fully encrypted health metrics storage and computation using Zama's FHEVM:
-
-```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
-
-import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
-import {FHE} from "@fhevm/solidity/lib/FHE.sol";
-
-contract HealthMetrics is SepoliaConfig {
-    struct HealthData {
-        euint32 bmi;           // Encrypted BMI
-        euint32 bloodSugar;    // Encrypted blood sugar
-        euint32 heartRate;     // Encrypted heart rate
-        euint32 healthScore;   // Encrypted computed health score
-        uint256 timestamp;
-        bool exists;
-    }
-    
-    mapping(address => HealthData) private healthRecords;
-    
-    // Submit encrypted health data
-    function submitHealthData(
-        externalEuint32 _bmi,
-        bytes calldata _bmiProof,
-        externalEuint32 _bloodSugar,
-        bytes calldata _bloodSugarProof,
-        externalEuint32 _heartRate,
-        bytes calldata _heartRateProof
-    ) external {
-        // Convert external encrypted inputs to internal encrypted values
-        euint32 encryptedBmi = FHE.fromExternal(_bmi, _bmiProof);
-        euint32 encryptedBloodSugar = FHE.fromExternal(_bloodSugar, _bloodSugarProof);
-        euint32 encryptedHeartRate = FHE.fromExternal(_heartRate, _heartRateProof);
-        
-        // Calculate encrypted health score using homomorphic operations
-        // Formula: healthScore = 3 * BMI + 5 * bloodSugar + 2 * heartRate
-        euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
-        euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
-        euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
-        
-        euint32 healthScore = FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted);
-        
-        // Store encrypted data
-        healthRecords[msg.sender] = HealthData({
-            bmi: encryptedBmi,
-            bloodSugar: encryptedBloodSugar,
-            heartRate: encryptedHeartRate,
-            healthScore: healthScore,
-            timestamp: block.timestamp,
-            exists: true
-        });
-        
-        // Grant decryption permissions to the user
-        FHE.allowThis(encryptedBmi);
-        FHE.allowThis(encryptedBloodSugar);
-        FHE.allowThis(encryptedHeartRate);
-        FHE.allowThis(healthScore);
-        
-        FHE.allow(encryptedBmi, msg.sender);
-        FHE.allow(encryptedBloodSugar, msg.sender);
-        FHE.allow(encryptedHeartRate, msg.sender);
-        FHE.allow(healthScore, msg.sender);
-    }
-}
-```
+The main contract implements fully encrypted health metrics storage and computation using Zama's FHEVM. It stores BMI, blood sugar, and heart rate as encrypted values (`euint32`) and calculates a weighted health score using homomorphic operations without ever seeing plaintext data.
 
 **Key Privacy Features:**
 - ✅ All health metrics stored as `euint32` (32-bit encrypted integers)
@@ -109,60 +44,11 @@ contract HealthMetrics is SepoliaConfig {
 
 ### Client-Side Encryption
 
-Before submitting data, the frontend encrypts each metric using fhevmjs:
-
-```typescript
-import { createInstance } from 'fhevmjs';
-
-// 1. Initialize FHEVM instance
-const fhevmInstance = await createInstance({
-  chainId: chainId,
-  publicKey: await contract.getPublicKey()
-});
-
-// 2. Create encrypted input with user's data
-const encryptedInput = await fhevmInstance.createEncryptedInput(
-  contractAddress,
-  userAddress
-);
-
-// 3. Add each metric (values are encrypted locally)
-encryptedInput.add32(bmiValue);        // BMI (e.g., 25)
-encryptedInput.add32(bloodSugarValue); // Blood sugar (e.g., 100 mg/dL)
-encryptedInput.add32(heartRateValue);  // Heart rate (e.g., 75 bpm)
-
-// 4. Encrypt all inputs with zero-knowledge proofs
-const encryptedData = await encryptedInput.encrypt();
-
-// 5. Submit to contract
-await contract.submitHealthData(
-  encryptedData.handles[0],    // Encrypted BMI handle
-  encryptedData.inputProof,    // ZK proof for BMI
-  encryptedData.handles[1],    // Encrypted blood sugar handle
-  encryptedData.inputProof,    // ZK proof for blood sugar
-  encryptedData.handles[2],    // Encrypted heart rate handle
-  encryptedData.inputProof     // ZK proof for heart rate
-);
-```
+Before submitting data, the frontend encrypts each metric using fhevmjs with zero-knowledge proofs to ensure data integrity without revealing values.
 
 ### On-Chain Homomorphic Operations
 
-The smart contract performs calculations without ever seeing plaintext values:
-
-```solidity
-// All operations on encrypted data (euint32 type)
-euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
-euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
-euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
-
-// Encrypted addition
-euint32 healthScore = FHE.add(
-    FHE.add(bmiWeighted, bloodSugarWeighted),
-    heartRateWeighted
-);
-
-// Result: healthScore = Enc(3×BMI + 5×bloodSugar + 2×heartRate)
-```
+The smart contract performs calculations on encrypted data using homomorphic operations, computing `healthScore = 3×BMI + 5×bloodSugar + 2×heartRate` without decrypting the input values.
 
 **Formula**: `healthScore = 3 × BMI + 5 × bloodSugar + 2 × heartRate`
 
@@ -173,38 +59,7 @@ This weighted sum emphasizes:
 
 ### Authorized Decryption
 
-Only authorized users can decrypt their health data:
-
-```typescript
-// 1. Request encrypted value from contract
-const encryptedBmi = await contract.getBmi();
-const encryptedBloodSugar = await contract.getBloodSugar();
-const encryptedHeartRate = await contract.getHeartRate();
-const encryptedHealthScore = await contract.getHealthScore();
-
-// 2. Decrypt using FHEVM instance (requires permission from contract)
-const decryptedBmi = await fhevmInstance.decrypt(
-  contractAddress,
-  encryptedBmi
-);
-const decryptedBloodSugar = await fhevmInstance.decrypt(
-  contractAddress,
-  encryptedBloodSugar
-);
-const decryptedHeartRate = await fhevmInstance.decrypt(
-  contractAddress,
-  encryptedHeartRate
-);
-const decryptedHealthScore = await fhevmInstance.decrypt(
-  contractAddress,
-  encryptedHealthScore
-);
-
-console.log(`BMI: ${decryptedBmi}`);
-console.log(`Blood Sugar: ${decryptedBloodSugar} mg/dL`);
-console.log(`Heart Rate: ${decryptedHeartRate} bpm`);
-console.log(`Health Score: ${decryptedHealthScore}`);
-```
+Only authorized users can decrypt their health data using the FHEVM instance, with permission granted by the smart contract for fine-grained access control.
 
 **Access Control**: The contract grants decryption permissions only to data owners:
 
@@ -229,29 +84,7 @@ FHE.allow(healthScore, msg.sender);
 
 ### Key Homomorphic Operations
 
-FHEVM supports various operations on encrypted data:
-
-```solidity
-// Arithmetic operations
-euint32 sum = FHE.add(encVal1, encVal2);
-euint32 product = FHE.mul(encVal1, encVal2);
-euint32 difference = FHE.sub(encVal1, encVal2);
-
-// Comparison operations (returns encrypted boolean)
-ebool isGreater = FHE.gt(encVal1, encVal2);
-ebool isEqual = FHE.eq(encVal1, encVal2);
-ebool isLess = FHE.lt(encVal1, encVal2);
-
-// Conditional selection (encrypted ternary operator)
-euint32 result = FHE.select(condition, valueIfTrue, valueIfFalse);
-
-// Bitwise operations
-euint32 andResult = FHE.and(encVal1, encVal2);
-euint32 orResult = FHE.or(encVal1, encVal2);
-
-// Type conversion
-euint32 converted = FHE.asEuint32(plaintextValue);
-```
+FHEVM supports arithmetic operations (add, multiply, subtract), comparison operations, conditional selection, and bitwise operations on encrypted data.
 
 ## 🧩 Technology Stack
 
