@@ -175,7 +175,8 @@ contract HealthMetrics is SepoliaConfig {
         );
 
         // Age adjustment: older adults get slight score reduction for same metrics
-        UserDemographics memory demo = userDemographics[msg.sender];
+        // Gas optimization: cache demographics lookup
+        UserDemographics storage demo = userDemographics[msg.sender];
         if (demo.exists) {
             if (demo.age > 50) {
                 // Reduce score by 5% for age > 50
@@ -187,9 +188,12 @@ contract HealthMetrics is SepoliaConfig {
 
         euint32 healthScore = adjustedScore;
         
-        // Track new users
+        // Track new users - Gas optimization: check existence first
         if (!healthRecords[msg.sender].exists) {
-            users.push(msg.sender);
+            // Gas optimization: use unchecked for array push (safe operation)
+            unchecked {
+                users.push(msg.sender);
+            }
         }
         
         // Store encrypted health data
