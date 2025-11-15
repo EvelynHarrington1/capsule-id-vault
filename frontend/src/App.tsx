@@ -5,6 +5,7 @@ import { config } from './config/wagmi';
 import { InMemoryStorageProvider } from './hooks/useInMemoryStorage';
 import Header from './components/Header';
 import HealthDashboard from './components/HealthDashboard';
+import { HealthStats } from './components/HealthStats';
 import Footer from './components/Footer';
 
 const queryClient = new QueryClient();
@@ -18,7 +19,10 @@ function App() {
             <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
               <Header />
               <main className="container mx-auto px-4 py-8 flex-1">
-                <HealthDashboard />
+                <div className="space-y-8">
+                  <HealthStats />
+                  <HealthDashboard />
+                </div>
               </main>
               <Footer />
             </div>
