@@ -71,6 +71,20 @@ const config: HardhatUserConfig = {
             },
       chainId: 11155111,
       url: SEPOLIA_RPC_URL,
+      gasPrice: 20000000000, // 20 gwei for Sepolia
+    },
+    zamaTestnet: {
+      accounts:
+        PRIVATE_KEY && PRIVATE_KEY.trim().length > 0
+          ? [PRIVATE_KEY]
+          : {
+              mnemonic: MNEMONIC,
+              path: "m/44'/60'/0'/0/",
+              count: 10,
+            },
+      chainId: 8009,
+      url: "https://devnet.zama.ai",
+      gasPrice: 1000000000, // 1 gwei for Zama testnet
     },
   },
   paths: {
@@ -80,20 +94,26 @@ const config: HardhatUserConfig = {
     tests: "./test",
   },
   solidity: {
-    version: "0.8.27",
+    version: "0.8.24",
     settings: {
       metadata: {
         // Not including the metadata hash
         // https://github.com/paulrberg/hardhat-template/issues/31
         bytecodeHash: "none",
       },
-      // Disable the optimizer when debugging
-      // https://hardhat.org/hardhat-network/#solidity-optimizer-support
+      // Enhanced optimizer settings for FHE operations
       optimizer: {
         enabled: true,
-        runs: 800,
+        runs: 1000, // Increased for better FHE operation optimization
+        details: {
+          yul: true,
+          yulDetails: {
+            stackAllocation: true,
+          },
+        },
       },
       evmVersion: "cancun",
+      viaIR: true, // Enable IR-based compilation for better optimization
     },
   },
   typechain: {
