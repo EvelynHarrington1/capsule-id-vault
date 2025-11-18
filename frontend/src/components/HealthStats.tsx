@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Button } from "./ui/Button";
 import { Activity, Users, TrendingUp, Heart } from "lucide-react";
 import { useHealthMetrics } from "../hooks/useHealthMetrics";
+import { StatsSkeleton } from "./SkeletonLoader";
 
 export function HealthStats() {
   const [stats, setStats] = useState({
@@ -100,10 +101,7 @@ export function HealthStats() {
 
       <CardContent>
         {isLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading statistics...</p>
-          </div>
+          <StatsSkeleton />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
