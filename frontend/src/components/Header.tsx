@@ -1,4 +1,5 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { DataExport } from './DataExport';
 
 export default function Header() {
   return (
@@ -14,7 +15,10 @@ export default function Header() {
               <p className="text-sm text-slate-300">Encrypted Health Metrics Analysis</p>
             </div>
           </div>
-          <ConnectButton />
+          <div className="flex items-center gap-4">
+            <DataExport />
+            <ConnectButton />
+          </div>
         </div>
       </div>
     </header>
