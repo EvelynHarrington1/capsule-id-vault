@@ -8,6 +8,7 @@ import Header from './components/Header';
 import HealthDashboard from './components/HealthDashboard';
 import { HealthStats } from './components/HealthStats';
 import { ErrorToast } from './components/ErrorToast';
+import { PerformanceDashboard } from './components/PerformanceDashboard';
 import Footer from './components/Footer';
 
 const queryClient = new QueryClient();
@@ -41,6 +42,9 @@ function AppContent() {
               </div>
 
               <Footer />
+
+              {/* Performance Dashboard */}
+              <PerformanceDashboard />
             </div>
           </InMemoryStorageProvider>
         </RainbowKitProvider>
