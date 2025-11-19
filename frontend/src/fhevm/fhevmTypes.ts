@@ -3,6 +3,27 @@ import type { FhevmInstanceConfig } from "@zama-fhe/relayer-sdk/web";
 import type { HandleContractPair } from "@zama-fhe/relayer-sdk/bundle";
 import type { DecryptedResults } from "@zama-fhe/relayer-sdk/bundle";
 
+// Export enhanced types for health metrics application
+export type {
+  FHEPublicKey,
+  FHEEncryptedValue,
+  HealthDataInput,
+  HealthDataOutput,
+  UserDemographics,
+  HealthMetrics,
+  PlatformStats,
+  FHEContractError,
+  ContractTransactionResult,
+  HealthDataValidation,
+  FHEVMInstance,
+  RelayerSDK,
+  HealthMetricType,
+  GenderType,
+  ErrorType,
+  AppConfig,
+  UIState
+} from './types';
+
 export type { FhevmInstance, FhevmInstanceConfig, HandleContractPair, DecryptedResults };
 
 export type FhevmDecryptionSignatureType = {
