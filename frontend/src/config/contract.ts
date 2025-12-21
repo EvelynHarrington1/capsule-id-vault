@@ -2,7 +2,7 @@
 // Both Sepolia and Localhost support FHE through SepoliaConfig
 // Production deployment uses Sepolia for Vercel: https://capsule-id-vault.vercel.app/
 export const CONTRACT_ADDRESSES = {
-  localhost: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512', // FHE-enabled (local development)
+  localhost: '0x5FbDB2315678afecb367f032d93F642f64180aa3', // FHE-enabled (local development)
   sepolia: '0x1c39401C7e3908C24D9c4b732782151b1809D225',   // FHE-enabled (production on Vercel)
 } as const;
 
@@ -16,7 +16,7 @@ export const NETWORK_CONFIG = {
   sepolia: {
     chainId: 11155111,
     name: 'Sepolia',
-    rpcUrl: 'https://sepolia.infura.io/v3/b18fb7e6ca7045ac83c41157ab93f990',
+    rpcUrl: 'https://1rpc.io/sepolia',
     contractAddress: CONTRACT_ADDRESSES.sepolia,
   },
 } as const;

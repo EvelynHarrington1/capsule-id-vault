@@ -6,9 +6,9 @@ A privacy-first health metrics analysis DApp using **Fully Homomorphic Encryptio
 
 ## 🚀 Live Demo
 
-**Deployed Application**: [https://capsule-id.vercel.app/](https://capsule-id.vercel.app/)
+**Deployed Application**: [https://capsule-id-vault.vercel.app/](https://capsule-id-vault.vercel.app/)
 
-📹 **Demo Video**: [Watch the demo](https://github.com/EvelynHarrington1/capsule-id-vault/blob/main/capsule-id.mp4)
+📹 **Demo Video**: [Watch the demo](https://github.com/EvelynHarrington1/capsule-id-vault/raw/main/capsule-id.mp4)
 
 ## 🌐 Network Support
 
@@ -32,7 +32,72 @@ The contract uses `SepoliaConfig` from `@fhevm/solidity` to enable FHE operation
 
 ### HealthMetrics.sol
 
-The main contract implements fully encrypted health metrics storage and computation using Zama's FHEVM. It stores BMI, blood sugar, and heart rate as encrypted values (`euint32`) and calculates a weighted health score using homomorphic operations without ever seeing plaintext data.
+The main contract implements fully encrypted health metrics storage and computation using Zama's FHEVM:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
+import {FHE} from "@fhevm/solidity/lib/FHE.sol";
+
+contract HealthMetrics is SepoliaConfig {
+    struct HealthData {
+        euint32 bmi;           // Encrypted BMI
+        euint32 bloodSugar;    // Encrypted blood sugar
+        euint32 heartRate;     // Encrypted heart rate
+        euint32 healthScore;   // Encrypted computed health score
+        uint256 timestamp;
+        bool exists;
+    }
+    
+    mapping(address => HealthData) private healthRecords;
+    
+    // Submit encrypted health data
+    function submitHealthData(
+        externalEuint32 _bmi,
+        bytes calldata _bmiProof,
+        externalEuint32 _bloodSugar,
+        bytes calldata _bloodSugarProof,
+        externalEuint32 _heartRate,
+        bytes calldata _heartRateProof
+    ) external {
+        // Convert external encrypted inputs to internal encrypted values
+        euint32 encryptedBmi = FHE.fromExternal(_bmi, _bmiProof);
+        euint32 encryptedBloodSugar = FHE.fromExternal(_bloodSugar, _bloodSugarProof);
+        euint32 encryptedHeartRate = FHE.fromExternal(_heartRate, _heartRateProof);
+        
+        // Calculate encrypted health score using homomorphic operations
+        // Formula: healthScore = 3 * BMI + 5 * bloodSugar + 2 * heartRate
+        euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
+        euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
+        euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
+        
+        euint32 healthScore = FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted);
+        
+        // Store encrypted data
+        healthRecords[msg.sender] = HealthData({
+            bmi: encryptedBmi,
+            bloodSugar: encryptedBloodSugar,
+            heartRate: encryptedHeartRate,
+            healthScore: healthScore,
+            timestamp: block.timestamp,
+            exists: true
+        });
+        
+        // Grant decryption permissions to the user
+        FHE.allowThis(encryptedBmi);
+        FHE.allowThis(encryptedBloodSugar);
+        FHE.allowThis(encryptedHeartRate);
+        FHE.allowThis(healthScore);
+        
+        FHE.allow(encryptedBmi, msg.sender);
+        FHE.allow(encryptedBloodSugar, msg.sender);
+        FHE.allow(encryptedHeartRate, msg.sender);
+        FHE.allow(healthScore, msg.sender);
+    }
+}
+```
 
 **Key Privacy Features:**
 - ✅ All health metrics stored as `euint32` (32-bit encrypted integers)
@@ -44,11 +109,60 @@ The main contract implements fully encrypted health metrics storage and computat
 
 ### Client-Side Encryption
 
-Before submitting data, the frontend encrypts each metric using fhevmjs with zero-knowledge proofs to ensure data integrity without revealing values.
+Before submitting data, the frontend encrypts each metric using fhevmjs:
+
+```typescript
+import { createInstance } from 'fhevmjs';
+
+// 1. Initialize FHEVM instance
+const fhevmInstance = await createInstance({
+  chainId: chainId,
+  publicKey: await contract.getPublicKey()
+});
+
+// 2. Create encrypted input with user's data
+const encryptedInput = await fhevmInstance.createEncryptedInput(
+  contractAddress,
+  userAddress
+);
+
+// 3. Add each metric (values are encrypted locally)
+encryptedInput.add32(bmiValue);        // BMI (e.g., 25)
+encryptedInput.add32(bloodSugarValue); // Blood sugar (e.g., 100 mg/dL)
+encryptedInput.add32(heartRateValue);  // Heart rate (e.g., 75 bpm)
+
+// 4. Encrypt all inputs with zero-knowledge proofs
+const encryptedData = await encryptedInput.encrypt();
+
+// 5. Submit to contract
+await contract.submitHealthData(
+  encryptedData.handles[0],    // Encrypted BMI handle
+  encryptedData.inputProof,    // ZK proof for BMI
+  encryptedData.handles[1],    // Encrypted blood sugar handle
+  encryptedData.inputProof,    // ZK proof for blood sugar
+  encryptedData.handles[2],    // Encrypted heart rate handle
+  encryptedData.inputProof     // ZK proof for heart rate
+);
+```
 
 ### On-Chain Homomorphic Operations
 
-The smart contract performs calculations on encrypted data using homomorphic operations, computing `healthScore = 3×BMI + 5×bloodSugar + 2×heartRate` without decrypting the input values.
+The smart contract performs calculations without ever seeing plaintext values:
+
+```solidity
+// All operations on encrypted data (euint32 type)
+euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
+euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
+euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
+
+// Encrypted addition
+euint32 healthScore = FHE.add(
+    FHE.add(bmiWeighted, bloodSugarWeighted),
+    heartRateWeighted
+);
+
+// Result: healthScore = Enc(3×BMI + 5×bloodSugar + 2×heartRate)
+```
 
 **Formula**: `healthScore = 3 × BMI + 5 × bloodSugar + 2 × heartRate`
 
@@ -59,7 +173,38 @@ This weighted sum emphasizes:
 
 ### Authorized Decryption
 
-Only authorized users can decrypt their health data using the FHEVM instance, with permission granted by the smart contract for fine-grained access control.
+Only authorized users can decrypt their health data:
+
+```typescript
+// 1. Request encrypted value from contract
+const encryptedBmi = await contract.getBmi();
+const encryptedBloodSugar = await contract.getBloodSugar();
+const encryptedHeartRate = await contract.getHeartRate();
+const encryptedHealthScore = await contract.getHealthScore();
+
+// 2. Decrypt using FHEVM instance (requires permission from contract)
+const decryptedBmi = await fhevmInstance.decrypt(
+  contractAddress,
+  encryptedBmi
+);
+const decryptedBloodSugar = await fhevmInstance.decrypt(
+  contractAddress,
+  encryptedBloodSugar
+);
+const decryptedHeartRate = await fhevmInstance.decrypt(
+  contractAddress,
+  encryptedHeartRate
+);
+const decryptedHealthScore = await fhevmInstance.decrypt(
+  contractAddress,
+  encryptedHealthScore
+);
+
+console.log(`BMI: ${decryptedBmi}`);
+console.log(`Blood Sugar: ${decryptedBloodSugar} mg/dL`);
+console.log(`Heart Rate: ${decryptedHeartRate} bpm`);
+console.log(`Health Score: ${decryptedHealthScore}`);
+```
 
 **Access Control**: The contract grants decryption permissions only to data owners:
 
@@ -84,7 +229,29 @@ FHE.allow(healthScore, msg.sender);
 
 ### Key Homomorphic Operations
 
-FHEVM supports arithmetic operations (add, multiply, subtract), comparison operations, conditional selection, and bitwise operations on encrypted data.
+FHEVM supports various operations on encrypted data:
+
+```solidity
+// Arithmetic operations
+euint32 sum = FHE.add(encVal1, encVal2);
+euint32 product = FHE.mul(encVal1, encVal2);
+euint32 difference = FHE.sub(encVal1, encVal2);
+
+// Comparison operations (returns encrypted boolean)
+ebool isGreater = FHE.gt(encVal1, encVal2);
+ebool isEqual = FHE.eq(encVal1, encVal2);
+ebool isLess = FHE.lt(encVal1, encVal2);
+
+// Conditional selection (encrypted ternary operator)
+euint32 result = FHE.select(condition, valueIfTrue, valueIfFalse);
+
+// Bitwise operations
+euint32 andResult = FHE.and(encVal1, encVal2);
+euint32 orResult = FHE.or(encVal1, encVal2);
+
+// Type conversion
+euint32 converted = FHE.asEuint32(plaintextValue);
+```
 
 ## 🧩 Technology Stack
 
@@ -111,101 +278,48 @@ FHEVM supports arithmetic operations (add, multiply, subtract), comparison opera
 capsule-id-vault/
 ├── contracts/              # Solidity smart contracts
 │   └── HealthMetrics.sol   # Main FHE health metrics contract
-├── scripts/                # Deployment and utility scripts
-│   ├── deploy-local.ps1    # Local network deployment script
-│   ├── deploy-sepolia.ts   # Sepolia deployment script
+├── deploy/                 # Deployment scripts
+│   └── deploy.ts
+├── test/                   # Test suites
+│   ├── HealthMetrics.ts          # Local network tests
+│   └── HealthMetricsSepolia.ts   # Sepolia testnet tests
+├── tasks/                  # Hardhat task scripts
+│   ├── accounts.ts         # Account management
+│   └── HealthMetrics.ts    # Contract interaction tasks
+├── scripts/                # Utility scripts
 │   ├── deploy.ts           # Main deployment script
-│   ├── start-dev.ps1       # Development server startup
-│   ├── test-contract.ps1   # Contract testing script
-│   └── test-fhe-publickey.ts # FHE public key testing
+│   ├── check-user-data.ts  # Data verification utility
+│   └── *.ps1               # PowerShell automation scripts
 ├── frontend/               # React frontend application
 │   ├── src/
 │   │   ├── components/     # React UI components
-│   │   │   ├── Footer.tsx
-│   │   │   ├── HealthDataDisplay.tsx
+│   │   │   ├── Header.tsx
+│   │   │   ├── HealthDashboard.tsx
 │   │   │   ├── HealthDataForm.tsx
+│   │   │   ├── HealthDataDisplay.tsx
+│   │   │   ├── Footer.tsx
 │   │   │   └── StatsCard.tsx
 │   │   ├── hooks/          # Custom React hooks
-│   │   │   ├── metamask/   # MetaMask integration hooks
-│   │   │   │   ├── Eip6963Types.ts
-│   │   │   │   ├── useEip6963.tsx
-│   │   │   │   ├── useMetaMaskEthersSigner.tsx
-│   │   │   │   └── useMetaMaskProvider.tsx
 │   │   │   ├── useHealthMetrics.ts
-│   │   │   ├── useInMemoryStorage.tsx
-│   │   │   ├── useLuckyDice.ts
 │   │   │   └── wagmi/      # Wallet connection hooks
-│   │   │       └── useWagmiEthers.ts
 │   │   ├── config/         # Configuration files
-│   │   │   ├── abi.json    # Contract ABI
-│   │   │   ├── contract.ts # Contract addresses and configuration
+│   │   │   ├── contract.ts # Contract addresses and ABIs
 │   │   │   └── wagmi.ts    # Wallet configuration
 │   │   ├── fhevm/          # FHE encryption utilities
-│   │   │   ├── FhevmDecryptionSignature.ts
-│   │   │   ├── fhevmTypes.ts
-│   │   │   ├── GenericStringStorage.ts
 │   │   │   ├── useFhevm.tsx
-│   │   │   ├── userFhevm.test.tsx
 │   │   │   └── internal/   # Core FHE logic
-│   │   │       ├── constants.ts
-│   │   │       ├── fhevm.ts
-│   │   │       ├── fhevmTypes.ts
-│   │   │       ├── PublicKeyStorage.ts
-│   │   │       ├── RelayerSDKLoader.ts
-│   │   │       └── mock/
-│   │   │           └── fhevmMock.ts
-│   │   ├── index.css       # Global styles
-│   │   └── vite-env.d.ts   # Vite environment types
+│   │   ├── App.tsx         # Main application component
+│   │   └── main.tsx        # Application entry point
 │   ├── public/             # Static assets
-│   │   ├── favicon.ico
-│   │   └── logo.svg
-│   ├── index.html          # HTML entry point
-│   ├── package.json        # Frontend dependencies
-│   ├── package-lock.json   # Lockfile
-│   ├── postcss.config.js   # PostCSS configuration
-│   ├── tailwind.config.js  # Tailwind CSS configuration
-│   ├── tsconfig.json       # TypeScript configuration
-│   ├── tsconfig.node.json  # Node TypeScript configuration
-│   └── vite.config.ts      # Vite configuration
+│   │   ├── logo.svg
+│   │   └── favicon.ico
+│   ├── package.json
+│   └── vite.config.ts
 ├── types/                  # TypeScript type definitions
-│   ├── @fhevm/             # FHEVM library types
-│   │   ├── index.ts
-│   │   └── solidity/
-│   │       ├── config/
-│   │       │   ├── index.ts
-│   │       │   └── ZamaConfig.sol/
-│   │       │       ├── EthereumConfig.ts
-│   │       │       ├── index.ts
-│   │       │       └── SepoliaConfig.ts
-│   │       ├── index.ts
-│   │       └── lib/
-│   │           ├── FHE.sol/
-│   │           │   ├── FHE.ts
-│   │           │   ├── IDecryptionOracle.ts
-│   │           │   ├── IKMSVerifier.ts
-│   │           │   └── index.ts
-│   │           ├── Impl.sol/
-│   │           │   ├── IACL.ts
-│   │           │   ├── IFHEVMExecutor.ts
-│   │           │   ├── IInputVerifier.ts
-│   │           │   └── index.ts
-│   │           └── index.ts
-│   ├── common.ts           # Common type definitions
-│   ├── contracts/          # Contract type definitions
-│   │   ├── HealthMetrics.ts
-│   │   └── index.ts
-│   ├── factories/          # Contract factory types
-│   │   ├── @fhevm/
-│   │   ├── contracts/
-│   │   └── index.ts
-│   └── hardhat.d.ts        # Hardhat type extensions
 ├── hardhat.config.ts       # Hardhat configuration
 ├── package.json            # Backend dependencies
-├── tsconfig.json           # Root TypeScript configuration
-├── .gitignore              # Git ignore rules
-├── DEPLOYMENT.md           # Deployment documentation
-├── SECURITY.md             # Security documentation
-├── capsule-id.mp4          # Project demonstration video
+├── start.ps1               # Quick start script (Sepolia)
+├── start-local.ps1         # Quick start script (localhost)
 └── README.md               # This file
 ```
 

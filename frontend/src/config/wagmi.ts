@@ -2,8 +2,7 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { mainnet } from 'wagmi/chains';
 import { http } from 'viem';
 
-// Your Infura API Key
-const INFURA_API_KEY = 'b18fb7e6ca7045ac83c41157ab93f990';
+const SEPOLIA_RPC_URL = 'https://1rpc.io/sepolia';
 
 // Configure custom Sepolia chain with your Infura RPC
 const sepolia = {
@@ -16,8 +15,8 @@ const sepolia = {
     symbol: 'ETH',
   },
   rpcUrls: {
-    default: { http: [`https://sepolia.infura.io/v3/${INFURA_API_KEY}`] },
-    public: { http: [`https://sepolia.infura.io/v3/${INFURA_API_KEY}`] },
+    default: { http: [SEPOLIA_RPC_URL] },
+    public: { http: [SEPOLIA_RPC_URL] },
   },
   blockExplorers: {
     default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
@@ -51,7 +50,7 @@ export const config = getDefaultConfig({
   projectId: WALLETCONNECT_PROJECT_ID,
   chains: [sepolia, localhost, mainnet],
   transports: {
-    [sepolia.id]: http(`https://sepolia.infura.io/v3/${INFURA_API_KEY}`),
+    [sepolia.id]: http(SEPOLIA_RPC_URL),
     [localhost.id]: http('http://127.0.0.1:8545'),
     [mainnet.id]: http(),
   },

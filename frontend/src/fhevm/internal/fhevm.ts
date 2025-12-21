@@ -11,8 +11,8 @@ import { FhevmInstance, FhevmInstanceConfig } from "../fhevmTypes";
 
 export class FhevmReactError extends Error {
   code: string;
-  constructor(code: string, message?: string, options?: ErrorOptions) {
-    super(message, options);
+  constructor(code: string, message?: string) {
+    super(message);
     this.code = code;
     this.name = "FhevmReactError";
   }
@@ -20,10 +20,9 @@ export class FhevmReactError extends Error {
 
 function throwFhevmError(
   code: string,
-  message?: string,
-  cause?: unknown
+  message?: string
 ): never {
-  throw new FhevmReactError(code, message, cause ? { cause } : undefined);
+  throw new FhevmReactError(code, message);
 }
 
 const isFhevmInitialized = (): boolean => {
@@ -95,8 +94,7 @@ async function getWeb3Client(rpcUrl: string) {
   } catch (e) {
     throwFhevmError(
       "WEB3_CLIENTVERSION_ERROR",
-      `The URL ${rpcUrl} is not a Web3 node or is not reachable. Please check the endpoint.`,
-      e
+      `The URL ${rpcUrl} is not a Web3 node or is not reachable. Please check the endpoint.`
     );
   } finally {
     rpc.destroy();
@@ -166,8 +164,7 @@ async function getFHEVMRelayerMetadata(rpcUrl: string) {
   } catch (e) {
     throwFhevmError(
       "FHEVM_RELAYER_METADATA_ERROR",
-      `The URL ${rpcUrl} is not a FHEVM Hardhat node or is not reachable. Please check the endpoint.`,
-      e
+      `The URL ${rpcUrl} is not a FHEVM Hardhat node or is not reachable. Please check the endpoint.`
     );
   } finally {
     rpc.destroy();
@@ -194,7 +191,7 @@ async function resolve(
   };
 
   // Help Typescript solver here:
-  if (Object.hasOwn(_mockChains, chainId)) {
+  if (chainId in _mockChains) {
     if (!rpcUrl) {
       rpcUrl = _mockChains[chainId];
     }

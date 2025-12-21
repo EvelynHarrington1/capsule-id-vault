@@ -12,9 +12,13 @@ import "solidity-coverage";
 import "./tasks/accounts";
 import "./tasks/HealthMetrics";
 
+// Run 'npx hardhat vars setup' to see the list of variables that need to be set
+
 const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
-const INFURA_API_KEY: string = vars.get("INFURA_API_KEY", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
-const ETHERSCAN_API_KEY: string = vars.get("ETHERSCAN_API_KEY", "");
+const INFURA_API_KEY: string = vars.get("INFURA_API_KEY", "");
+const SEPOLIA_RPC_URL: string =
+  INFURA_API_KEY !== "" ? `https://sepolia.infura.io/v3/${INFURA_API_KEY}` : vars.get("SEPOLIA_RPC_URL", "https://1rpc.io/sepolia");
+const PRIVATE_KEY: string = vars.get("PRIVATE_KEY", "");
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",
@@ -23,7 +27,7 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      sepolia: ETHERSCAN_API_KEY,
+      sepolia: vars.get("ETHERSCAN_API_KEY", ""),
     },
   },
   gasReporter: {
@@ -41,16 +45,32 @@ const config: HardhatUserConfig = {
     localhost: {
       accounts: {
         mnemonic: MNEMONIC,
+        path: "m/44'/60'/0'/0/",
+        count: 10,
+      },
+      chainId: 31337,
+      url: "http://localhost:8545",
+    },
+    anvil: {
+      accounts: {
+        mnemonic: MNEMONIC,
+        path: "m/44'/60'/0'/0/",
+        count: 10,
       },
       chainId: 31337,
       url: "http://localhost:8545",
     },
     sepolia: {
-      accounts: {
-        mnemonic: MNEMONIC,
-      },
+      accounts:
+        PRIVATE_KEY && PRIVATE_KEY.trim().length > 0
+          ? [PRIVATE_KEY]
+          : {
+              mnemonic: MNEMONIC,
+              path: "m/44'/60'/0'/0/",
+              count: 10,
+            },
       chainId: 11155111,
-      url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
+      url: SEPOLIA_RPC_URL,
     },
   },
   paths: {
@@ -63,8 +83,12 @@ const config: HardhatUserConfig = {
     version: "0.8.27",
     settings: {
       metadata: {
+        // Not including the metadata hash
+        // https://github.com/paulrberg/hardhat-template/issues/31
         bytecodeHash: "none",
       },
+      // Disable the optimizer when debugging
+      // https://hardhat.org/hardhat-network/#solidity-optimizer-support
       optimizer: {
         enabled: true,
         runs: 800,

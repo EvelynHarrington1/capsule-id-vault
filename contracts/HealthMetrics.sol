@@ -4,31 +4,43 @@ pragma solidity ^0.8.24;
 import {FHE, euint32, externalEuint32, ebool} from "@fhevm/solidity/lib/FHE.sol";
 import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
-/// @title HealthMetrics - FHE-based health metrics analysis
-/// @notice Allows users to submit encrypted health data and compute health scores
-/// @dev Uses FHEVM for encrypted computation on health metrics
+/// @title Encrypted Health Metrics Analysis Contract
+/// @author Capsule ID Team
+/// @notice Demonstrates privacy-preserving health data analysis using Fully Homomorphic Encryption (FHE)
+/// @dev Users can submit encrypted health metrics (BMI, blood sugar, heart rate) and receive an encrypted health score
 contract HealthMetrics is SepoliaConfig {
-    // Encrypted health data storage
-    mapping(address => euint32) private _bmi;
-    mapping(address => euint32) private _bloodSugar;
-    mapping(address => euint32) private _heartRate;
-    mapping(address => euint32) private _healthScore;
-
-    // User tracking
-    mapping(address => bool) public hasHealthData;
-    address[] private _users;
-
-    // Events
-    event HealthDataSubmitted(address indexed user);
-    event HealthScoreCalculated(address indexed user, euint32 score);
-
+    
+    /// @notice Structure to store encrypted health data for a user
+    struct HealthData {
+        euint32 bmi;           // Encrypted BMI value
+        euint32 bloodSugar;    // Encrypted blood sugar level
+        euint32 heartRate;     // Encrypted heart rate
+        euint32 healthScore;   // Encrypted calculated health score
+        uint256 timestamp;     // Timestamp of submission
+        bool exists;           // Flag to check if data exists
+    }
+    
+    /// @notice Mapping from user address to their encrypted health data
+    mapping(address => HealthData) private healthRecords;
+    
+    /// @notice Array to track all users who have submitted data
+    address[] private users;
+    
+    /// @notice Event emitted when health data is submitted
+    event HealthDataSubmitted(address indexed user, uint256 timestamp);
+    
+    /// @notice Event emitted when health score is calculated
+    event HealthScoreCalculated(address indexed user, uint256 timestamp);
+    
     /// @notice Submit encrypted health metrics and calculate health score
-    /// @param _bmi Encrypted BMI value
-    /// @param _bmiProof ZK proof for BMI
-    /// @param _bloodSugar Encrypted blood sugar value
-    /// @param _bloodSugarProof ZK proof for blood sugar
-    /// @param _heartRate Encrypted heart rate value
-    /// @param _heartRateProof ZK proof for heart rate
+    /// @param _bmi Encrypted BMI value (external format)
+    /// @param _bmiProof Proof for BMI encryption
+    /// @param _bloodSugar Encrypted blood sugar value (external format)
+    /// @param _bloodSugarProof Proof for blood sugar encryption
+    /// @param _heartRate Encrypted heart rate value (external format)
+    /// @param _heartRateProof Proof for heart rate encryption
+    /// @dev Formula: healthScore = 3*bmi + 5*bloodSugar + 2*heartRate
+    /// @dev This represents a weighted sum (not scaled by 10 to avoid FHE division complexity)
     function submitHealthData(
         externalEuint32 _bmi,
         bytes calldata _bmiProof,
@@ -37,61 +49,105 @@ contract HealthMetrics is SepoliaConfig {
         externalEuint32 _heartRate,
         bytes calldata _heartRateProof
     ) external {
-        require(!hasHealthData[msg.sender], "Health data already submitted");
-
-        // Decrypt and store encrypted values
-        euint32 bmi = FHE.asEuint32(_bmi, _bmiProof);
-        euint32 bloodSugar = FHE.asEuint32(_bloodSugar, _bloodSugarProof);
-        euint32 heartRate = FHE.asEuint32(_heartRate, _heartRateProof);
-
-        // Store encrypted values
-        _bmi[msg.sender] = bmi;
-        _bloodSugar[msg.sender] = bloodSugar;
-        _heartRate[msg.sender] = heartRate;
-
-        // Calculate health score: 3*BMI + 5*BloodSugar + 2*HeartRate
-        euint32 score = FHE.add(
-            FHE.add(
-                FHE.mul(FHE.asEuint32(3), bmi),
-                FHE.mul(FHE.asEuint32(5), bloodSugar)
-            ),
-            FHE.mul(FHE.asEuint32(2), heartRate)
-        );
-
-        _healthScore[msg.sender] = score;
-        hasHealthData[msg.sender] = true;
-        _users.push(msg.sender);
-
-        emit HealthDataSubmitted(msg.sender);
-        emit HealthScoreCalculated(msg.sender, score);
+        // Convert external encrypted inputs to internal encrypted values
+        euint32 encryptedBmi = FHE.fromExternal(_bmi, _bmiProof);
+        euint32 encryptedBloodSugar = FHE.fromExternal(_bloodSugar, _bloodSugarProof);
+        euint32 encryptedHeartRate = FHE.fromExternal(_heartRate, _heartRateProof);
+        
+        // Calculate health score using homomorphic operations
+        // Formula: healthScore = 3*bmi + 5*bloodSugar + 2*heartRate
+        // Note: We skip division by 10 to avoid complex FHE division operations
+        // The score represents a weighted sum where blood sugar has the highest impact
+        euint32 bmiWeighted = FHE.mul(encryptedBmi, FHE.asEuint32(3));
+        euint32 bloodSugarWeighted = FHE.mul(encryptedBloodSugar, FHE.asEuint32(5));
+        euint32 heartRateWeighted = FHE.mul(encryptedHeartRate, FHE.asEuint32(2));
+        
+        euint32 healthScore = FHE.add(FHE.add(bmiWeighted, bloodSugarWeighted), heartRateWeighted);
+        
+        // Track new users
+        if (!healthRecords[msg.sender].exists) {
+            users.push(msg.sender);
+        }
+        
+        // Store encrypted health data
+        healthRecords[msg.sender] = HealthData({
+            bmi: encryptedBmi,
+            bloodSugar: encryptedBloodSugar,
+            heartRate: encryptedHeartRate,
+            healthScore: healthScore,
+            timestamp: block.timestamp,
+            exists: true
+        });
+        
+        // Grant decryption permissions to the user
+        FHE.allow(encryptedBmi, msg.sender);
+        FHE.allow(encryptedBloodSugar, msg.sender);
+        FHE.allow(encryptedHeartRate, msg.sender);
+        FHE.allow(healthScore, msg.sender);
+        
+        // Also allow contract to access for future operations
+        FHE.allowThis(encryptedBmi);
+        FHE.allowThis(encryptedBloodSugar);
+        FHE.allowThis(encryptedHeartRate);
+        FHE.allowThis(healthScore);
+        
+        emit HealthDataSubmitted(msg.sender, block.timestamp);
+        emit HealthScoreCalculated(msg.sender, block.timestamp);
     }
-
-    /// @notice Get encrypted BMI for caller
+    
+    /// @notice Get encrypted BMI value for the caller
+    /// @return Encrypted BMI value
     function getBmi() external view returns (euint32) {
-        require(hasHealthData[msg.sender], "No health data submitted");
-        return _bmi[msg.sender];
+        require(healthRecords[msg.sender].exists, "No health data found");
+        return healthRecords[msg.sender].bmi;
     }
-
-    /// @notice Get encrypted blood sugar for caller
+    
+    /// @notice Get encrypted blood sugar value for the caller
+    /// @return Encrypted blood sugar value
     function getBloodSugar() external view returns (euint32) {
-        require(hasHealthData[msg.sender], "No health data submitted");
-        return _bloodSugar[msg.sender];
+        require(healthRecords[msg.sender].exists, "No health data found");
+        return healthRecords[msg.sender].bloodSugar;
     }
-
-    /// @notice Get encrypted heart rate for caller
+    
+    /// @notice Get encrypted heart rate value for the caller
+    /// @return Encrypted heart rate value
     function getHeartRate() external view returns (euint32) {
-        require(hasHealthData[msg.sender], "No health data submitted");
-        return _heartRate[msg.sender];
+        require(healthRecords[msg.sender].exists, "No health data found");
+        return healthRecords[msg.sender].heartRate;
     }
-
-    /// @notice Get encrypted health score for caller
+    
+    /// @notice Get encrypted health score for the caller
+    /// @return Encrypted health score value
     function getHealthScore() external view returns (euint32) {
-        require(hasHealthData[msg.sender], "No health data submitted");
-        return _healthScore[msg.sender];
+        require(healthRecords[msg.sender].exists, "No health data found");
+        return healthRecords[msg.sender].healthScore;
     }
-
-    /// @notice Get total number of users with health data
+    
+    /// @notice Get timestamp of last health data submission
+    /// @return Timestamp value
+    function getTimestamp() external view returns (uint256) {
+        require(healthRecords[msg.sender].exists, "No health data found");
+        return healthRecords[msg.sender].timestamp;
+    }
+    
+    /// @notice Check if user has submitted health data
+    /// @return True if user has data, false otherwise
+    function hasHealthData() external view returns (bool) {
+        return healthRecords[msg.sender].exists;
+    }
+    
+    /// @notice Get total number of users who have submitted data
+    /// @return Total user count
     function getTotalUsers() external view returns (uint256) {
-        return _users.length;
+        return users.length;
+    }
+    
+    /// @notice Get user address at specific index
+    /// @param index Index in the users array
+    /// @return User address
+    function getUserAtIndex(uint256 index) external view returns (address) {
+        require(index < users.length, "Index out of bounds");
+        return users[index];
     }
 }
+

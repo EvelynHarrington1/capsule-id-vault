@@ -62,6 +62,20 @@ export const useHealthMetrics = ({
     setStatus('Fetching encrypted data...');
 
     try {
+      // First check if user has data to avoid unnecessary revert errors
+      try {
+        const hasData = await writeContract.hasHealthData();
+        if (!hasData) {
+          setEncryptedRecord(undefined);
+          setStatus('No health data found');
+          return undefined;
+        }
+      } catch (hasDataError: any) {
+        // If hasHealthData fails (e.g., method not available), continue with direct fetch
+        // This provides backward compatibility
+        console.log('hasHealthData check failed, proceeding with direct fetch:', hasDataError.message);
+      }
+
       const [bmi, bloodSugar, heartRate, healthScore, ts] = await Promise.all([
         writeContract.getBmi(),
         writeContract.getBloodSugar(),
@@ -95,16 +109,22 @@ export const useHealthMetrics = ({
       setStatus('Encrypted data loaded');
       return record;
     } catch (error: any) {
+      // Handle various "no data" scenarios
       const isNoDataError =
         error.message?.includes('No health data found') ||
         error.message?.includes('could not decode result data') ||
-        error.code === 'BAD_DATA';
+        error.message?.includes('missing revert data') ||
+        error.message?.includes('execution reverted') ||
+        error.code === 'BAD_DATA' ||
+        error.code === 'CALL_EXCEPTION' ||
+        error.reason === null;
 
       if (isNoDataError) {
         setEncryptedRecord(undefined);
         setStatus('No health data found');
       } else {
-        setStatus(`Failed to fetch data: ${error.message}`);
+        console.error('Error fetching health data:', error);
+        setStatus(`Failed to fetch data: ${error.message || 'Unknown error'}`);
       }
       return undefined;
     } finally {
@@ -217,7 +237,16 @@ export const useHealthMetrics = ({
         setStatus('⚠️ Data submitted but not loaded yet. Please click Refresh.');
         return true;
       } catch (error: any) {
-        setStatus(`Submission failed: ${error.message}`);
+        // Handle user rejection gracefully
+        if (error.code === 4001 || error.message?.includes('User denied') || error.message?.includes('user rejected')) {
+          setStatus('Transaction cancelled by user');
+        } else if (error.message?.includes('insufficient funds')) {
+          setStatus('Insufficient funds. Please ensure you have enough ETH for gas fees.');
+        } else if (error.message?.includes('network')) {
+          setStatus('Network error. Please check your connection and try again.');
+        } else {
+          setStatus(`Submission failed: ${error.message || 'Unknown error'}`);
+        }
         return false;
       } finally {
         setIsSubmitting(false);
